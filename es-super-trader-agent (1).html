@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ES Super Trader Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #020406;
+  --bg2:      #050810;
+  --bg3:      #080e18;
+  --panel:    #0b1422;
+  --b1:       #0e1f32;
+  --b2:       #172d45;
+  --b3:       #1e3d5c;
+  --cyan:     #00d4ff;
+  --green:    #00ff9d;
+  --red:      #ff2755;
+  --amber:    #ffb300;
+  --violet:   #c084fc;
+  --dim:      #162840;
+  --muted:    #2a4a68;
+  --text:     #5a8aaa;
+  --soft:     #80b0cc;
+  --bright:   #b8d8f0;
+  --white:    #e8f5ff;
+  --glow-c:   0 0 20px rgba(0,212,255,0.3);
+  --glow-g:   0 0 20px rgba(0,255,157,0.3);
+  --glow-r:   0 0 20px rgba(255,39,85,0.3);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{
+  background:var(--bg);
+  font-family:'Inter',sans-serif;
+  color:var(--text);
+  display:flex;flex-direction:column;
+}
+
+/* scanlines */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);
+}
+/* grid */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.012) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,0.012) 1px,transparent 1px);
+  background-size:52px 52px;
+}
+
+/* ══════════════ TOPBAR ══════════════ */
+.topbar{
+  height:52px;flex-shrink:0;z-index:300;position:relative;
+  background:rgba(2,4,6,0.97);
+  border-bottom:1px solid var(--b2);
+  display:flex;align-items:stretch;
+}
+.tb-brand{
+  padding:0 20px;border-right:1px solid var(--b2);
+  display:flex;flex-direction:column;justify-content:center;min-width:200px;
+}
+.tb-brand-name{
+  font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:5px;
+  color:var(--cyan);text-shadow:var(--glow-c);
+}
+.tb-brand-name span{color:var(--green);}
+.tb-brand-sub{
+  font-family:'Space Mono',monospace;font-size:7px;letter-spacing:3px;
+  color:var(--muted);margin-top:1px;
+}
+
+/* live price strip */
+.tb-prices{display:flex;flex:1;align-items:stretch;}
+.tbp{
+  display:flex;flex-direction:column;justify-content:center;
+  padding:0 16px;border-right:1px solid var(--b1);min-width:110px;
+}
+.tbp-l{font-family:'Space Mono',monospace;font-size:7px;letter-spacing:3px;color:var(--dim);}
+.tbp-v{
+  font-family:'Space Mono',monospace;font-size:15px;color:var(--bright);
+  transition:color 0.4s;
+}
+.tbp-v.up{color:var(--green);}
+.tbp-v.dn{color:var(--red);}
+.tbp-v.cy{color:var(--cyan);}
+.tbp-v.spin{color:var(--muted);animation:breathe 0.8s infinite;}
+.tbp-s{font-family:'Space Mono',monospace;font-size:8px;margin-top:1px;}
+.tbp-s.up{color:var(--green);}
+.tbp-s.dn{color:var(--red);}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.3}}
+
+.tb-clock{
+  padding:0 18px;border-left:1px solid var(--b2);
+  display:flex;flex-direction:column;justify-content:center;align-items:flex-end;
+}
+#clk{font-family:'Space Mono',monospace;font-size:18px;color:var(--cyan);letter-spacing:2px;}
+#sess{
+  font-family:'Space Mono',monospace;font-size:7px;letter-spacing:3px;
+  padding:2px 8px;border-radius:10px;margin-top:2px;text-align:center;
+  border:1px solid var(--green);color:var(--green);background:rgba(0,255,157,0.07);
+}
+#sess.off{border-color:var(--red);color:var(--red);background:rgba(255,39,85,0.07);}
+#sess.pre{border-color:var(--amber);color:var(--amber);background:rgba(255,179,0,0.07);}
+
+/* ══════════════ LAYOUT ══════════════ */
+.workspace{
+  flex:1;display:grid;
+  grid-template-columns:310px 1fr 340px;
+  overflow:hidden;position:relative;z-index:1;
+}
+
+/* ══════════════ LEFT: CONTROL PANEL ══════════════ */
+.ctrl{
+  border-right:1px solid var(--b2);background:var(--bg2);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.ctrl-scroll{flex:1;overflow-y:auto;}
+.ctrl-scroll::-webkit-scrollbar{width:3px;}
+.ctrl-scroll::-webkit-scrollbar-thumb{background:var(--b2);}
+
+.csec{padding:13px 15px;border-bottom:1px solid var(--b1);}
+.csec-hd{display:flex;align-items:center;gap:8px;margin-bottom:11px;}
+.cnum{
+  width:22px;height:22px;border-radius:50%;font-family:'Space Mono',monospace;font-size:8px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.cnum.v{border:1px solid var(--violet);color:var(--violet);background:rgba(192,132,252,0.09);}
+.cnum.y{border:1px solid var(--amber);color:var(--amber);background:rgba(255,179,0,0.09);}
+.cnum.g{border:1px solid var(--green);color:var(--green);background:rgba(0,255,157,0.09);}
+.ctitle{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:3px;color:var(--bright);}
+.cbadge{
+  font-family:'Space Mono',monospace;font-size:7px;letter-spacing:1px;
+  padding:2px 7px;border-radius:2px;margin-left:auto;
+}
+.cbadge.v{background:rgba(192,132,252,0.1);color:var(--violet);border:1px solid rgba(192,132,252,0.3);}
+.cbadge.y{background:rgba(255,179,0,0.1);color:var(--amber);border:1px solid rgba(255,179,0,0.3);}
+.cbadge.g{background:rgba(0,255,157,0.1);color:var(--green);border:1px solid rgba(0,255,157,0.3);}
+
+/* ── CHART UPLOAD ── */
+.drop-zone{
+  border:2px dashed var(--b3);border-radius:5px;
+  min-height:140px;cursor:pointer;position:relative;
+  overflow:hidden;background:var(--bg3);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;transition:all 0.2s;
+}
+.drop-zone:hover,.drop-zone.drag{
+  border-color:var(--violet);background:rgba(192,132,252,0.05);
+}
+.drop-zone.has-img{border-color:rgba(0,255,157,0.4);}
+#chart-preview{
+  display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0;
+}
+.dz-overlay{
+  position:relative;z-index:2;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+}
+.drop-zone.has-img .dz-overlay{
+  position:absolute;inset:0;background:rgba(2,4,6,0.65);
+  display:flex;z-index:2;
+}
+.dz-icon{font-size:32px;line-height:1;}
+.dz-main{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--violet);}
+.dz-sub{font-family:'Space Mono',monospace;font-size:7px;color:var(--muted);}
+#file-in{display:none;}
+
+.read-pill{
+  display:none;margin-top:7px;
+  font-family:'Space Mono',monospace;font-size:8px;letter-spacing:2px;
+  padding:5px 9px;border-radius:3px;border:1px solid rgba(0,255,157,0.4);
+  color:var(--green);background:rgba(0,255,157,0.06);
+}
+.read-pill.show{display:block;}
+
+/* auto-filled fields */
+.af{
+  background:var(--bg3);border:1px solid var(--b1);border-radius:3px;
+  padding:7px 10px;margin-bottom:5px;position:relative;transition:border-color 0.3s;
+}
+.af.done{border-color:rgba(0,212,255,0.3);}
+.afl{font-family:'Space Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--dim);margin-bottom:2px;}
+.afv{font-family:'Space Mono',monospace;font-size:10px;color:var(--bright);min-height:14px;line-height:1.5;}
+.afv.wait{color:var(--dim);font-style:italic;}
+.afv.ready{color:var(--cyan);}
+.af-tick{position:absolute;top:7px;right:8px;font-size:9px;color:var(--dim);}
+.af-tick.ok{color:var(--green);}
+
+/* manual fields */
+.mf{margin-bottom:7px;}
+.mf label{
+  font-family:'Space Mono',monospace;font-size:7px;letter-spacing:2px;
+  color:var(--dim);display:block;margin-bottom:3px;
+}
+.mf input,.mf select,.mf textarea{
+  width:100%;background:var(--bg3);border:1px solid var(--b1);
+  color:var(--bright);padding:7px 10px;border-radius:3px;
+  font-family:'Space Mono',monospace;font-size:11px;outline:none;
+  transition:border-color 0.2s;
+}
+.mf input:focus,.mf select:focus,.mf textarea:focus{border-color:var(--amber);}
+.mf select option{background:var(--bg3);}
+.mf textarea{resize:none;height:52px;font-size:10px;}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+
+/* mood slider */
+.mood-wrap{margin-bottom:6px;}
+.mood-wrap input[type=range]{
+  -webkit-appearance:none;width:100%;height:3px;
+  background:linear-gradient(90deg,var(--red),var(--amber),var(--green));
+  border:none;padding:0;cursor:pointer;border-radius:2px;
+}
+.mood-wrap input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--white);border:2px solid var(--cyan);cursor:pointer;
+}
+.mood-labels{
+  display:flex;justify-content:space-between;
+  font-family:'Space Mono',monospace;font-size:7px;color:var(--dim);margin-top:3px;
+}
+
+/* ── CTA BUTTONS ── */
+.btn-wrap{padding:12px 15px 15px;display:flex;flex-direction:column;gap:7px;}
+.btn-read{
+  width:100%;padding:10px;
+  background:rgba(192,132,252,0.08);border:1px solid rgba(192,132,252,0.5);
+  color:var(--violet);font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:4px;
+  cursor:pointer;border-radius:3px;transition:all 0.2s;
+}
+.btn-read:hover{box-shadow:0 0 25px rgba(192,132,252,0.3);background:rgba(192,132,252,0.15);}
+.btn-read:disabled{opacity:0.3;cursor:not-allowed;}
+
+.btn-signal{
+  width:100%;padding:13px;
+  background:rgba(0,255,157,0.08);border:1px solid rgba(0,255,157,0.55);
+  color:var(--green);font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:5px;
+  cursor:pointer;border-radius:3px;transition:all 0.2s;
+  text-shadow:0 0 12px rgba(0,255,157,0.4);
+  box-shadow:0 0 18px rgba(0,255,157,0.08);
+}
+.btn-signal:hover{box-shadow:0 0 40px rgba(0,255,157,0.3);}
+.btn-signal:disabled{opacity:0.3;cursor:not-allowed;}
+
+/* ══════════════ CENTER: CHART + SIGNAL ══════════════ */
+.center{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--b2);}
+
+/* chart */
+.chart-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.chart-toolbar{
+  height:36px;flex-shrink:0;background:var(--bg2);border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;gap:8px;padding:0 12px;
+}
+.ct-title{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:3px;color:var(--cyan);}
+.tfs{display:flex;gap:3px;}
+.tfc{
+  font-family:'Space Mono',monospace;font-size:8px;padding:2px 7px;
+  border:1px solid var(--b1);background:var(--bg3);color:var(--muted);
+  cursor:pointer;border-radius:2px;transition:all 0.15s;
+}
+.tfc.on,.tfc:hover{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,0.08);}
+.ind-tags{display:flex;gap:4px;margin-left:auto;}
+.it{
+  font-family:'Space Mono',monospace;font-size:7px;letter-spacing:1px;
+  padding:2px 6px;border-radius:2px;border:1px solid;
+}
+.it.vwap{border-color:rgba(0,212,255,0.4);color:var(--cyan);}
+.it.vol{border-color:rgba(0,255,157,0.4);color:var(--green);}
+.it.rsi{border-color:rgba(255,179,0,0.4);color:var(--amber);}
+.it.bb{border-color:rgba(192,132,252,0.4);color:var(--violet);}
+
+.tv-embed{flex:1;position:relative;}
+.tv-embed iframe{width:100%;height:100%;border:none;display:block;}
+
+/* ── SIGNAL OUTPUT ── */
+.signal-out{
+  flex-shrink:0;border-top:1px solid var(--b2);background:var(--bg2);
+  overflow-y:auto;max-height:52vh;min-height:180px;
+}
+.signal-out::-webkit-scrollbar{width:3px;}
+.signal-out::-webkit-scrollbar-thumb{background:var(--b2);}
+
+/* idle */
+.sig-idle{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:28px;gap:10px;opacity:0.25;
+}
+.sig-idle-icon{font-size:36px;}
+.sig-idle-main{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:6px;color:var(--cyan);}
+.sig-idle-sub{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--dim);text-align:center;line-height:2.2;}
+
+/* signal layout */
+.sig-body{display:flex;flex-direction:column;}
+
+/* top row: banner + levels */
+.sig-top{display:flex;align-items:stretch;border-bottom:1px solid var(--b1);}
+
+.sig-banner{
+  display:flex;flex-direction:column;justify-content:center;
+  padding:14px 18px;border-right:1px solid var(--b1);min-width:140px;
+  position:relative;overflow:hidden;
+}
+.sig-banner::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(45deg,transparent,transparent 20px,rgba(255,255,255,0.008) 20px,rgba(255,255,255,0.008) 21px);
+}
+.sig-banner.long{background:linear-gradient(160deg,rgba(0,255,157,0.09),rgba(0,212,255,0.05));}
+.sig-banner.short{background:linear-gradient(160deg,rgba(255,39,85,0.09),rgba(255,179,0,0.04));}
+.sig-banner.nogo{background:linear-gradient(160deg,rgba(255,179,0,0.08),rgba(255,39,85,0.04));}
+.sig-dir{font-family:'Bebas Neue',sans-serif;font-size:44px;letter-spacing:2px;line-height:1;position:relative;}
+.sig-banner.long .sig-dir{color:var(--green);text-shadow:var(--glow-g);}
+.sig-banner.short .sig-dir{color:var(--red);text-shadow:var(--glow-r);}
+.sig-banner.nogo .sig-dir{color:var(--amber);}
+.sig-setup{font-family:'Space Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px;position:relative;}
+.sig-ts{font-family:'Space Mono',monospace;font-size:7px;color:var(--dim);margin-top:2px;position:relative;}
+
+/* confidence */
+.sig-conf{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:12px 14px;border-right:1px solid var(--b1);
+}
+.cring-w{position:relative;width:68px;height:68px;}
+.cring-w svg{transform:rotate(-90deg);}
+.cr-bg{fill:none;stroke:var(--b1);stroke-width:5;}
+.cr-fg{fill:none;stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1);}
+.cr-fg.hi{stroke:var(--green);}
+.cr-fg.md{stroke:var(--amber);}
+.cr-fg.lo{stroke:var(--red);}
+.cr-inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.cr-pct{font-family:'Bebas Neue',sans-serif;font-size:20px;}
+.cr-lbl{font-family:'Space Mono',monospace;font-size:6px;letter-spacing:1px;color:var(--dim);}
+
+/* levels */
+.sig-levels{display:flex;flex:1;align-items:stretch;}
+.slc{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:8px 6px;border-right:1px solid var(--b1);
+}
+.slc:last-child{border-right:none;}
+.slc-l{font-family:'Space Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--dim);margin-bottom:4px;}
+.slc-v{font-family:'Space Mono',monospace;font-size:15px;color:var(--bright);}
+.slc-s{font-family:'Space Mono',monospace;font-size:8px;margin-top:2px;}
+.slc.entry{border-top:2px solid var(--cyan);}
+.slc.sl{border-top:2px solid var(--red);}
+.slc.t1{border-top:2px solid rgba(0,255,157,0.3);}
+.slc.t2{border-top:2px solid rgba(0,255,157,0.55);}
+.slc.t3{border-top:2px solid rgba(0,255,157,0.85);}
+.slc.entry .slc-v{color:var(--cyan);}
+.slc.sl .slc-v{color:var(--red);}
+.slc.t1 .slc-v,.slc.t2 .slc-v,.slc.t3 .slc-v{color:var(--green);}
+
+/* bottom row: reasoning + management + invalidation */
+.sig-bottom{display:grid;grid-template-columns:1fr 200px 200px;border-top:1px solid var(--b1);}
+.sb-cell{padding:11px 13px;border-right:1px solid var(--b1);}
+.sb-cell:last-child{border-right:none;}
+.sb-title{font-family:'Space Mono',monospace;font-size:7px;letter-spacing:3px;color:var(--cyan);margin-bottom:7px;}
+.sb-text{font-size:12px;line-height:1.7;color:var(--text);}
+.sb-text strong{color:var(--bright);font-weight:600;}
+
+.mgmt-steps{display:flex;flex-direction:column;gap:4px;}
+.mstep{display:flex;gap:6px;align-items:flex-start;padding:5px 7px;background:var(--bg3);border-radius:2px;border-left:2px solid var(--cyan);}
+.msn{font-family:'Bebas Neue',sans-serif;font-size:13px;color:var(--cyan);min-width:14px;}
+.mst{font-size:10px;line-height:1.4;color:var(--text);}
+
+.inval-list{list-style:none;display:flex;flex-direction:column;gap:4px;}
+.inval-list li{font-family:'Space Mono',monospace;font-size:9px;padding-left:14px;position:relative;color:var(--text);line-height:1.4;}
+.inval-list li::before{content:'⚠';position:absolute;left:0;font-size:8px;color:var(--amber);}
+
+.mind-wrap{padding:11px 13px;border-top:1px solid var(--b1);}
+.mind-card{padding:9px 11px;border-radius:3px;border-left:3px solid var(--amber);}
+.mind-card.ok{border-left-color:var(--green);background:rgba(0,255,157,0.04);}
+.mind-card.warn{border-left-color:var(--amber);background:rgba(255,179,0,0.04);}
+.mind-card.bad{border-left-color:var(--red);background:rgba(255,39,85,0.05);}
+.mind-label{font-family:'Space Mono',monospace;font-size:7px;letter-spacing:3px;margin-bottom:4px;}
+.mind-card.ok .mind-label{color:var(--green);}
+.mind-card.warn .mind-label{color:var(--amber);}
+.mind-card.bad .mind-label{color:var(--red);}
+.mind-text{font-size:11px;line-height:1.6;color:var(--text);}
+
+.nogo-wrap{padding:14px;}
+.nogo-card{background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.35);border-radius:3px;padding:12px;}
+.nogo-label{font-family:'Space Mono',monospace;font-size:7px;letter-spacing:3px;color:var(--amber);margin-bottom:6px;}
+.nogo-text{font-size:13px;line-height:1.7;color:var(--text);}
+
+/* scan */
+.scan-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;}
+.scan-ring{width:52px;height:52px;border:2px solid var(--b2);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-txt{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--cyan);}
+.scan-log{font-family:'Space Mono',monospace;font-size:8px;color:var(--muted);text-align:center;line-height:2.2;}
+
+/* history bar */
+.hist-bar{
+  padding:6px 12px;border-top:1px solid var(--b1);background:var(--bg3);
+  display:flex;gap:5px;flex-wrap:wrap;align-items:center;
+  font-family:'Space Mono',monospace;font-size:7px;color:var(--dim);letter-spacing:2px;
+  flex-shrink:0;
+}
+.hc{padding:2px 8px;border-radius:2px;border:1px solid var(--b1);color:var(--dim);cursor:pointer;font-size:8px;transition:all .15s;}
+.hc:hover{border-color:var(--cyan);color:var(--cyan);}
+.hc.L{border-color:rgba(0,255,157,.35);color:var(--green);}
+.hc.S{border-color:rgba(255,39,85,.35);color:var(--red);}
+.hc.N{border-color:rgba(255,179,0,.35);color:var(--amber);}
+
+/* ══════════════ RIGHT: COMPANION ══════════════ */
+.companion{background:var(--bg2);display:flex;flex-direction:column;overflow:hidden;}
+.comp-hd{
+  padding:11px 14px;border-bottom:1px solid var(--b2);flex-shrink:0;
+  display:flex;align-items:center;gap:8px;
+}
+.comp-hd-title{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:4px;color:var(--cyan);}
+.live-dot{width:7px;height:7px;border-radius:50%;margin-left:auto;}
+.live-dot.on{background:var(--green);animation:blink 1.5s infinite;}
+.live-dot.off{background:var(--dim);}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.2;}}
+
+.comp-body{flex:1;overflow-y:auto;}
+.comp-body::-webkit-scrollbar{width:3px;}
+.comp-body::-webkit-scrollbar-thumb{background:var(--b2);}
+
+.comp-idle{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:9px;opacity:.25;padding:20px;
+}
+.comp-idle-icon{font-size:40px;}
+.comp-idle-txt{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--dim);text-align:center;line-height:2.2;}
+
+.csec{padding:11px 14px;border-bottom:1px solid var(--b1);}
+.csec-title{
+  font-family:'Space Mono',monospace;font-size:7px;letter-spacing:3px;color:var(--amber);
+  margin-bottom:9px;display:flex;align-items:center;gap:6px;
+}
+.csec-title::after{content:'';flex:1;height:1px;background:var(--b1);}
+
+.cstat{
+  display:flex;align-items:flex-start;gap:6px;
+  padding:6px 8px;border-radius:3px;margin-bottom:5px;
+  background:var(--bg3);border:1px solid var(--b1);
+}
+.cstat.ok{border-color:rgba(0,255,157,.25);}
+.cstat.warn{border-color:rgba(255,179,0,.25);}
+.cstat.bad{border-color:rgba(255,39,85,.25);}
+.cdot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.ok .cdot{background:var(--green);}
+.warn .cdot{background:var(--amber);}
+.bad .cdot{background:var(--red);}
+.cst{font-family:'Space Mono',monospace;font-size:9px;color:var(--text);line-height:1.5;flex:1;}
+
+.cdata{background:var(--bg3);border:1px solid var(--b1);border-radius:3px;padding:8px 10px;margin-bottom:5px;}
+.cdl{font-family:'Space Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--dim);margin-bottom:3px;}
+.cdv{font-family:'Space Mono',monospace;font-size:10px;color:var(--cyan);line-height:1.5;}
+.cdv.dim{color:var(--muted);font-style:italic;font-size:9px;}
+
+.bias-block{
+  text-align:center;padding:12px 0;
+}
+.bias-val{font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:5px;}
+.bias-val.bull{color:var(--green);text-shadow:var(--glow-g);}
+.bias-val.bear{color:var(--red);text-shadow:var(--glow-r);}
+.bias-val.neut{color:var(--amber);}
+.bias-sub{font-family:'Space Mono',monospace;font-size:8px;color:var(--dim);margin-top:3px;}
+
+/* reading badge */
+.chart-read-badge{
+  display:flex;align-items:center;gap:6px;padding:7px 10px;
+  background:rgba(192,132,252,.07);border:1px solid rgba(192,132,252,.3);
+  border-radius:3px;margin-bottom:6px;
+}
+.crb-d{width:6px;height:6px;border-radius:50%;background:var(--violet);animation:blink 1.2s infinite;}
+.crb-t{font-family:'Space Mono',monospace;font-size:8px;color:var(--violet);}
+</style>
+</head>
+<body>
+
+<!-- ══ API KEY GATE ══ -->
+<div id="api-gate" style="display:none;position:fixed;inset:0;z-index:9999;background:#030508;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#0a1525;border:1px solid #1e3d5c;border-radius:8px;padding:40px;max-width:460px;width:90%;text-align:center;">
+    <div style="font-family:'Russo One',sans-serif;font-size:22px;letter-spacing:5px;color:#00d4ff;text-shadow:0 0 16px rgba(0,212,255,0.4);margin-bottom:6px;">ES SUPER AGENT</div>
+    <div style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:3px;color:#2e5878;margin-bottom:28px;">ENTER YOUR ANTHROPIC API KEY TO CONTINUE</div>
+    <input id="api-key-input" type="password"
+      placeholder="sk-ant-api03-..."
+      style="width:100%;background:#08101a;border:1px solid #162d45;color:#c0e0f5;padding:14px;border-radius:6px;font-family:'Space Mono',monospace;font-size:13px;outline:none;margin-bottom:10px;letter-spacing:1px;"
+    >
+    <div style="font-family:'Space Mono',monospace;font-size:8px;color:#1a3550;margin-bottom:20px;">Your key is saved locally in your browser only. Never sent anywhere except Anthropic.</div>
+    <button onclick="saveApiKey()"
+      style="width:100%;padding:14px;background:rgba(0,255,157,0.1);border:1px solid rgba(0,255,157,0.5);color:#00ff9d;font-family:'Russo One',sans-serif;font-size:16px;letter-spacing:4px;cursor:pointer;border-radius:6px;">
+      ⚡ LAUNCH AGENT
+    </button>
+    <div style="margin-top:16px;font-family:'Space Mono',monospace;font-size:8px;color:#1a3550;">
+      Get your key at <span style="color:#00d4ff;">console.anthropic.com</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOPBAR ══ -->
+<div class="topbar">
+  <div class="tb-brand">
+    <div class="tb-brand-name">ES <span>SUPER</span> AGENT</div>
+    <div class="tb-brand-sub">AI · VISION · LIVE DATA · RTH</div>
+  </div>
+  <div class="tb-prices">
+    <div class="tbp">
+      <div class="tbp-l">ES FUTURES</div>
+      <div class="tbp-v spin" id="tp-es">LIVE...</div>
+      <div class="tbp-s" id="tp-es-chg">loading</div>
+    </div>
+    <div class="tbp">
+      <div class="tbp-l">SPY ETF</div>
+      <div class="tbp-v spin" id="tp-spy">LIVE...</div>
+      <div class="tbp-s" id="tp-spy-chg">loading</div>
+    </div>
+    <div class="tbp">
+      <div class="tbp-l">VIX</div>
+      <div class="tbp-v spin" id="tp-vix">LIVE...</div>
+      <div class="tbp-s" id="tp-vix-s">fear index</div>
+    </div>
+    <div class="tbp">
+      <div class="tbp-l">NQ FUTURES</div>
+      <div class="tbp-v spin" id="tp-nq">LIVE...</div>
+      <div class="tbp-s" id="tp-nq-chg">loading</div>
+    </div>
+    <div class="tbp">
+      <div class="tbp-l">10Y YIELD</div>
+      <div class="tbp-v spin" id="tp-tnx">LIVE...</div>
+      <div class="tbp-s" id="tp-tnx-s">treasury</div>
+    </div>
+    <div class="tbp">
+      <div class="tbp-l">DXY (USD)</div>
+      <div class="tbp-v spin" id="tp-dxy">LIVE...</div>
+      <div class="tbp-s" id="tp-dxy-s">dollar index</div>
+    </div>
+    <div class="tbp">
+      <div class="tbp-l">SIGNALS TODAY</div>
+      <div class="tbp-v cy" id="tp-sigs">0</div>
+      <div class="tbp-s" id="tp-conf">avg conf –</div>
+    </div>
+  </div>
+  <div class="tb-clock">
+    <div id="clk">--:--:--</div>
+    <div id="sess" class="sess off">LOADING</div>
+  </div>
+</div>
+
+<!-- ══ WORKSPACE ══ -->
+<div class="workspace">
+
+  <!-- ══ LEFT: CONTROLS ══ -->
+  <div class="ctrl">
+    <div class="ctrl-scroll">
+
+      <!-- STEP 1: CHART UPLOAD -->
+      <div class="csec">
+        <div class="csec-hd">
+          <div class="cnum v">1</div>
+          <div class="ctitle">CHART CAPTURE</div>
+          <div class="cbadge v">📷 AI VISION</div>
+        </div>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-in').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+          <img id="chart-preview" alt="chart"/>
+          <div class="dz-overlay" id="dz-overlay">
+            <div class="dz-icon">📊</div>
+            <div class="dz-main">DROP CHART HERE</div>
+            <div class="dz-sub">or click to upload</div>
+            <div class="dz-sub" style="color:var(--dim)">PNG · JPG · screenshot</div>
+          </div>
+        </div>
+        <input type="file" id="file-in" accept="image/*" onchange="handleFile(event)">
+        <div class="read-pill" id="read-pill">✓ CHART READY FOR AI ANALYSIS</div>
+      </div>
+
+      <!-- STEP 2: AUTO-FILLED (from AI chart read) -->
+      <div class="csec">
+        <div class="csec-hd">
+          <div class="cnum v">2</div>
+          <div class="ctitle">AI CHART READ</div>
+          <div class="cbadge v">⚡ AUTO-FILL</div>
+        </div>
+        <div class="af" id="af-price"><div class="afl">ES PRICE & TREND</div><div class="afv wait" id="av-price">Upload chart → AI reads...</div><span class="af-tick" id="at-price">○</span></div>
+        <div class="af" id="af-vwap"><div class="afl">VWAP POSITION & BANDS</div><div class="afv wait" id="av-vwap">Upload chart → AI reads...</div><span class="af-tick" id="at-vwap">○</span></div>
+        <div class="af" id="af-struct"><div class="afl">MARKET STRUCTURE</div><div class="afv wait" id="av-struct">Upload chart → AI reads...</div><span class="af-tick" id="at-struct">○</span></div>
+        <div class="af" id="af-vol"><div class="afl">VOLUME CHARACTER</div><div class="afv wait" id="av-vol">Upload chart → AI reads...</div><span class="af-tick" id="at-vol">○</span></div>
+        <div class="af" id="af-flow"><div class="afl">ORDER FLOW / MOMENTUM</div><div class="afv wait" id="av-flow">Upload chart → AI reads...</div><span class="af-tick" id="at-flow">○</span></div>
+        <div class="af" id="af-setup"><div class="afl">DETECTED SETUP(S)</div><div class="afv wait" id="av-setup">Upload chart → AI reads...</div><span class="af-tick" id="at-setup">○</span></div>
+        <div class="af" id="af-candle"><div class="afl">CANDLE PATTERN</div><div class="afv wait" id="av-candle">Upload chart → AI reads...</div><span class="af-tick" id="at-candle">○</span></div>
+        <div class="af" id="af-rsi"><div class="afl">RSI / MOMENTUM</div><div class="afv wait" id="av-rsi">Upload chart → AI reads...</div><span class="af-tick" id="at-rsi">○</span></div>
+      </div>
+
+      <!-- STEP 3: YOUR LEVELS (only what AI can't see) -->
+      <div class="csec">
+        <div class="csec-hd">
+          <div class="cnum y">3</div>
+          <div class="ctitle">KEY LEVELS</div>
+          <div class="cbadge y">✋ YOUR INPUT</div>
+        </div>
+        <div class="r2">
+          <div class="mf"><label>PDH</label><input type="number" id="f-pdh" placeholder="5792.00" step="0.25"></div>
+          <div class="mf"><label>PDL</label><input type="number" id="f-pdl" placeholder="5758.00" step="0.25"></div>
+        </div>
+        <div class="r2">
+          <div class="mf"><label>TODAY HOD</label><input type="number" id="f-hod" placeholder="5788.50" step="0.25"></div>
+          <div class="mf"><label>TODAY LOD</label><input type="number" id="f-lod" placeholder="5764.00" step="0.25"></div>
+        </div>
+        <div class="r2">
+          <div class="mf"><label>SUPPORT</label><input type="number" id="f-sup" placeholder="5770.00" step="0.25"></div>
+          <div class="mf"><label>RESISTANCE</label><input type="number" id="f-res" placeholder="5790.00" step="0.25"></div>
+        </div>
+        <div class="mf"><label>RTH OPEN</label><input type="number" id="f-open" placeholder="5774.00" step="0.25"></div>
+      </div>
+
+      <!-- STEP 4: MINDSET (only you know this) -->
+      <div class="csec">
+        <div class="csec-hd">
+          <div class="cnum y">4</div>
+          <div class="ctitle">YOUR STATE</div>
+          <div class="cbadge y">🧠 MINDSET</div>
+        </div>
+        <div class="mf">
+          <label>MENTAL CLARITY</label>
+          <div class="mood-wrap">
+            <input type="range" id="f-mood" min="1" max="10" value="7" oninput="moodChange()">
+            <div class="mood-labels">
+              <span>Foggy</span>
+              <span id="mood-lbl" style="color:var(--bright)">7 — Focused</span>
+              <span>Peak</span>
+            </div>
+          </div>
+        </div>
+        <div class="mf">
+          <label>EMOTIONAL STATE</label>
+          <select id="f-emotion">
+            <option value="">– select –</option>
+            <option>Calm and neutral — optimal</option>
+            <option>Confident (process-based)</option>
+            <option>Slightly anxious — manageable</option>
+            <option>Frustrated after losses</option>
+            <option>Overconfident after wins</option>
+            <option>FOMO — feeling left out</option>
+            <option>Revenge mindset — DANGER</option>
+            <option>Distracted / low energy</option>
+          </select>
+        </div>
+        <div class="mf"><label>SESSION P&L</label><input type="text" id="f-pnl" placeholder="+$300 or -$150"></div>
+        <div class="mf"><label>NOTES FOR AI</label><textarea id="f-extra" placeholder="Anything AI should know: near daily max, felt early, news coming..."></textarea></div>
+      </div>
+
+    </div><!-- end scroll -->
+
+    <!-- ACTION BUTTONS -->
+    <div class="btn-wrap">
+      <button class="btn-read" id="btn-read" onclick="readChart()" disabled>👁 AI READ CHART</button>
+      <button class="btn-signal" id="btn-signal" onclick="generateSignal()" disabled>⚡ GENERATE SIGNAL</button>
+    </div>
+  </div><!-- end ctrl -->
+
+  <!-- ══ CENTER: CHART + SIGNAL ══ -->
+  <div class="center">
+
+    <!-- TradingView Chart -->
+    <div class="chart-wrap">
+      <div class="chart-toolbar">
+        <div class="ct-title">ES LIVE CHART</div>
+        <div class="tfs">
+          <div class="tfc" onclick="setTF('1')">1m</div>
+          <div class="tfc on" onclick="setTF('3')">3m</div>
+          <div class="tfc" onclick="setTF('5')">5m</div>
+          <div class="tfc" onclick="setTF('15')">15m</div>
+          <div class="tfc" onclick="setTF('D')">D</div>
+        </div>
+        <div class="ind-tags">
+          <div class="it vwap">VWAP</div>
+          <div class="it vol">VOLUME</div>
+          <div class="it rsi">RSI</div>
+          <div class="it bb">BB</div>
+        </div>
+      </div>
+      <div class="tv-embed">
+        <iframe id="tv-iframe"
+          src="https://www.tradingview.com/widgetembed/?frameElementId=tv-iframe&symbol=CME_MINI%3AES1!&interval=3&theme=dark&style=1&locale=en&toolbar_bg=%23020406&hide_top_toolbar=0&hide_legend=0&save_image=1&studies=%5B%22Volume%40tv-basicstudies%22%2C%22VWAP%40tv-basicstudies%22%2C%22RSI%40tv-basicstudies%22%2C%22BB%40tv-basicstudies%22%5D&show_popup_button=1&withdateranges=1&details=1&hotlist=1&calendar=1&news=1&hideideas=1&backgroundColor=%23020406&gridColor=%230d1f30"
+          allowtransparency="true" scrolling="no" frameborder="0" allow="clipboard-write"></iframe>
+      </div>
+    </div>
+
+    <!-- Signal Output -->
+    <div class="signal-out" id="signal-out">
+      <div class="sig-idle" id="sig-idle">
+        <div class="sig-idle-icon">📡</div>
+        <div class="sig-idle-main">SIGNAL ENGINE READY</div>
+        <div class="sig-idle-sub">
+          1. Upload your chart screenshot<br>
+          2. Click AI READ CHART<br>
+          3. Add your levels + mindset<br>
+          4. Click GENERATE SIGNAL
+        </div>
+      </div>
+    </div>
+
+    <!-- History bar -->
+    <div class="hist-bar" id="hist-bar">
+      <span>SIGNALS:</span>
+    </div>
+
+  </div><!-- end center -->
+
+  <!-- ══ RIGHT: COMPANION ══ -->
+  <div class="companion">
+    <div class="comp-hd">
+      <div class="comp-hd-title">COMPANION</div>
+      <div class="live-dot off" id="live-dot"></div>
+    </div>
+    <div class="comp-body" id="comp-body">
+      <div class="comp-idle" id="comp-idle">
+        <div class="comp-idle-icon">🤖</div>
+        <div class="comp-idle-txt">
+          SUPER TRADER AI<br>STANDING BY<br><br>
+          Upload your chart &<br>hit AI READ CHART<br>to activate
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end workspace -->
+
+<script>
+// ══════════════════════════════
+// API KEY MANAGEMENT
+// ══════════════════════════════
+let ANTHROPIC_KEY = '';
+
+function initApiKey(){
+  const saved = localStorage.getItem('es_agent_api_key');
+  if(saved && saved.startsWith('sk-ant')){
+    ANTHROPIC_KEY = saved;
+    document.getElementById('api-gate').style.display = 'none';
+  } else {
+    document.getElementById('api-gate').style.display = 'flex';
+  }
+}
+
+function saveApiKey(){
+  const val = document.getElementById('api-key-input').value.trim();
+  if(!val.startsWith('sk-ant')){
+    alert('Invalid API key. It should start with sk-ant...');
+    return;
+  }
+  ANTHROPIC_KEY = val;
+  localStorage.setItem('es_agent_api_key', val);
+  document.getElementById('api-gate').style.display = 'none';
+}
+
+function getHeaders(){
+  return {
+    'Content-Type': 'application/json',
+    'x-api-key': ANTHROPIC_KEY,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true'
+  };
+}
+
+initApiKey();
+
+// ══════════════════════════════
+// CLOCK & SESSION
+// ══════════════════════════════
+const moodMap = ['','Panicking','Anxious','Nervous','Uneasy','Off','Neutral','Focused','Sharp','Zone','Peak Focus'];
+function moodChange(){
+  const v = document.getElementById('f-mood').value;
+  document.getElementById('mood-lbl').textContent = v+' — '+moodMap[v];
+}
+moodChange();
+
+function tick(){
+  const et = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const p = n => String(n).padStart(2,'0');
+  document.getElementById('clk').textContent = `${p(et.getHours())}:${p(et.getMinutes())}:${p(et.getSeconds())} ET`;
+  const t = et.getHours()*60+et.getMinutes();
+  const s = document.getElementById('sess');
+  if(t>=570&&t<960){s.textContent='● RTH OPEN';s.className='sess';}
+  else if(t>=540&&t<570){s.textContent='◌ PRE-MARKET';s.className='sess pre';}
+  else{s.textContent='○ CLOSED';s.className='sess off';}
+}
+setInterval(tick,1000); tick();
+
+// ══════════════════════════════
+// LIVE PRICE FEED (Yahoo Finance via allorigins proxy)
+// ══════════════════════════════
+const TICKERS = [
+  {id:'ES=F', el:'tp-es', chg:'tp-es-chg'},
+  {id:'SPY',  el:'tp-spy',chg:'tp-spy-chg'},
+  {id:'^VIX', el:'tp-vix',chg:'tp-vix-s'},
+  {id:'NQ=F', el:'tp-nq', chg:'tp-nq-chg'},
+  {id:'^TNX', el:'tp-tnx',chg:'tp-tnx-s'},
+  {id:'DX-Y.NYB', el:'tp-dxy',chg:'tp-dxy-s'},
+];
+
+async function fetchPrice(ticker){
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1m&range=1d`;
+  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+  try {
+    const r = await fetch(proxy);
+    const d = await r.json();
+    const body = JSON.parse(d.contents);
+    const meta = body.chart.result[0].meta;
+    return {
+      price: meta.regularMarketPrice,
+      prev:  meta.chartPreviousClose || meta.previousClose,
+      name:  ticker
+    };
+  } catch(e){ return null; }
+}
+
+function fmtPrice(p){ return p ? p.toFixed(2) : '–'; }
+
+async function updatePrices(){
+  for(const t of TICKERS){
+    const data = await fetchPrice(t.id);
+    const el = document.getElementById(t.el);
+    const chgEl = document.getElementById(t.chg);
+    if(!data){ el.textContent='–'; el.className='tbp-v'; continue; }
+    const chg = data.price - data.prev;
+    const pct = (chg/data.prev*100);
+    el.textContent = fmtPrice(data.price);
+    el.className = 'tbp-v '+(chg>=0?'up':'dn');
+    if(chgEl){
+      const sign = chg>=0?'+':'';
+      chgEl.textContent = `${sign}${chg.toFixed(2)} (${sign}${pct.toFixed(2)}%)`;
+      chgEl.className = 'tbp-s '+(chg>=0?'up':'dn');
+    }
+  }
+}
+updatePrices();
+setInterval(updatePrices, 30000); // refresh every 30s
+
+// ══════════════════════════════
+// CHART TIMEFRAME SWITCH
+// ══════════════════════════════
+const TF_MAP = {'1':'1','3':'3','5':'5','15':'15','D':'D'};
+function setTF(tf){
+  document.querySelectorAll('.tfc').forEach(b=>b.classList.remove('on'));
+  event.target.classList.add('on');
+  const base = `https://www.tradingview.com/widgetembed/?frameElementId=tv-iframe&symbol=CME_MINI%3AES1!&interval=${tf}&theme=dark&style=1&locale=en&toolbar_bg=%23020406&hide_top_toolbar=0&hide_legend=0&save_image=1&studies=%5B%22Volume%40tv-basicstudies%22%2C%22VWAP%40tv-basicstudies%22%2C%22RSI%40tv-basicstudies%22%2C%22BB%40tv-basicstudies%22%5D&show_popup_button=1&withdateranges=1&details=1&hotlist=1&calendar=1&news=1&hideideas=1&backgroundColor=%23020406&gridColor=%230d1f30`;
+  document.getElementById('tv-iframe').src = base;
+}
+
+// ══════════════════════════════
+// CHART UPLOAD & DRAG DROP
+// ══════════════════════════════
+let chartImageB64 = null;
+
+function dragOver(e){ e.preventDefault(); document.getElementById('drop-zone').classList.add('drag'); }
+function dragLeave(e){ document.getElementById('drop-zone').classList.remove('drag'); }
+function dropFile(e){
+  e.preventDefault();
+  dragLeave(e);
+  const file = e.dataTransfer.files[0];
+  if(file && file.type.startsWith('image/')) loadImage(file);
+}
+function handleFile(e){
+  const file = e.target.files[0];
+  if(file) loadImage(file);
+}
+
+function loadImage(file){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const b64full = e.target.result;
+    chartImageB64 = b64full.split(',')[1];
+    const preview = document.getElementById('chart-preview');
+    preview.src = b64full;
+    preview.style.display = 'block';
+    document.getElementById('drop-zone').classList.add('has-img');
+    document.getElementById('read-pill').classList.add('show');
+    document.getElementById('btn-read').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ══════════════════════════════
+// AI CHART READING (Claude Vision)
+// ══════════════════════════════
+const API = 'https://api.anthropic.com/v1/messages';
+
+const CHART_READ_SYSTEM = `You are an elite professional ES futures trader with 20 years experience. You are analyzing a TradingView chart screenshot like a top prop trader would.
+
+Extract every piece of tradeable information from the chart image. Be specific with numbers where visible. Think like Paul Tudor Jones looking at this chart.
+
+Respond ONLY with valid JSON:
+{
+  "price": {
+    "current": "exact or estimated price",
+    "trend": "short description of price action",
+    "momentum": "accelerating/decelerating/flat"
+  },
+  "vwap": {
+    "position": "Above/Below/At VWAP with distance estimate",
+    "bands": "SD band context if visible",
+    "dynamic": "price approaching/rejecting/reclaiming VWAP"
+  },
+  "structure": {
+    "trend": "HH/HL uptrend | LH/LL downtrend | range | transitioning",
+    "character": "description of price action quality",
+    "keyObservation": "most important structural note"
+  },
+  "volume": {
+    "current": "high/normal/low/declining/expanding",
+    "vsAverage": "vs recent average",
+    "climactic": true or false,
+    "note": "volume analysis"
+  },
+  "orderflow": {
+    "pressure": "buying pressure/selling pressure/balanced",
+    "absorption": "any absorption signs visible",
+    "delta": "positive/negative/diverging",
+    "tape": "aggressive buyers/sellers or passive"
+  },
+  "setups": {
+    "primary": "main setup name",
+    "secondary": ["other setups visible"],
+    "quality": "A+/A/B/C",
+    "confidence": "High/Medium/Low"
+  },
+  "candle": {
+    "lastBar": "description of most recent completed bar",
+    "pattern": "pattern name if applicable",
+    "context": "what this pattern means here"
+  },
+  "rsi": {
+    "value": "RSI value if visible or estimated",
+    "condition": "overbought/oversold/neutral/diverging",
+    "note": "RSI context"
+  },
+  "bollingerBands": {
+    "position": "upper/middle/lower band proximity",
+    "squeeze": true or false,
+    "breakout": "direction if applicable or none"
+  },
+  "keyLevels": {
+    "immediateSupport": "price level",
+    "immediateResistance": "price level",
+    "magnet": "nearest price magnet/target"
+  },
+  "traderSummary": {
+    "bias": "BULLISH/BEARISH/NEUTRAL",
+    "urgency": "High/Medium/Low — act now or wait",
+    "risk": "Clean setup/Average/Choppy — risk assessment",
+    "topObservation": "the single most important thing a pro trader sees on this chart right now"
+  }
+}`;
+
+async function readChart(){
+  if(!chartImageB64){ alert('Upload a chart first'); return; }
+  const btn = document.getElementById('btn-read');
+  btn.disabled = true; btn.textContent = '👁 READING CHART...';
+  document.getElementById('live-dot').className = 'live-dot on';
+
+  showCompanionLoading();
+
+  // Set auto fields to loading
+  ['price','vwap','struct','vol','flow','setup','candle','rsi'].forEach(k=>{
+    document.getElementById('av-'+k).textContent = 'AI reading...';
+    document.getElementById('av-'+k).className = 'afv';
+    document.getElementById('at-'+k).textContent = '...';
+    document.getElementById('at-'+k).className = 'af-tick';
+  });
+
+  try {
+    const res = await fetch(API, {
+      method:'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1500,
+        system: CHART_READ_SYSTEM,
+        messages:[{
+          role:'user',
+          content:[
+            {
+              type:'image',
+              source:{ type:'base64', media_type:'image/png', data: chartImageB64 }
+            },
+            {
+              type:'text',
+              text:`Analyze this ES futures TradingView chart as a top professional trader. Extract all visible data and trading context. Current ET time: ${new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'})}. Be specific, precise, and think like you are about to put your own money on the line based on what you see.`
+            }
+          ]
+        }]
+      })
+    });
+    const data = await res.json();
+    const raw = data.content?.map(b=>b.text||'').join('') || '';
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const chart = JSON.parse(clean);
+
+    // Populate auto fields
+    setAF('price',  `${chart.price?.current} | ${chart.price?.trend}`);
+    setAF('vwap',   `${chart.vwap?.position} | ${chart.vwap?.dynamic}`);
+    setAF('struct', `${chart.structure?.trend} | ${chart.structure?.keyObservation}`);
+    setAF('vol',    `${chart.volume?.current} vs avg | ${chart.volume?.note}`);
+    setAF('flow',   `${chart.orderflow?.pressure} | Delta: ${chart.orderflow?.delta} | ${chart.orderflow?.tape}`);
+    setAF('setup',  `${chart.setups?.primary} (${chart.setups?.quality}) | ${(chart.setups?.secondary||[]).join(', ')}`);
+    setAF('candle', `${chart.candle?.pattern||chart.candle?.lastBar} | ${chart.candle?.context}`);
+    setAF('rsi',    `RSI ${chart.rsi?.value} — ${chart.rsi?.condition} | ${chart.rsi?.note}`);
+
+    // Render companion panel
+    renderCompanion(chart);
+    window._chartData = chart;
+    document.getElementById('btn-signal').disabled = false;
+
+  } catch(e){
+    ['price','vwap','struct','vol','flow','setup','candle','rsi'].forEach(k=>{
+      document.getElementById('av-'+k).textContent = 'Read error — try again';
+      document.getElementById('av-'+k).className = 'afv wait';
+    });
+    document.getElementById('comp-body').innerHTML = `<div style="padding:16px;font-family:'Space Mono',monospace;font-size:9px;color:var(--red);">Chart read error: ${e.message}</div>`;
+  }
+
+  btn.disabled = false; btn.textContent = '👁 AI READ CHART';
+}
+
+function setAF(id, val){
+  document.getElementById('av-'+id).textContent = val;
+  document.getElementById('av-'+id).className = 'afv ready';
+  document.getElementById('at-'+id).textContent = '✓';
+  document.getElementById('at-'+id).className = 'af-tick ok';
+  document.getElementById('af-'+id).classList.add('done');
+}
+
+function showCompanionLoading(){
+  document.getElementById('comp-idle').style.display='none';
+  document.getElementById('comp-body').innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:32px;flex:1;">
+      <div class="scan-ring"></div>
+      <div class="scan-txt">AI READING YOUR CHART</div>
+      <div class="scan-log">Analyzing price structure...<br>Reading VWAP position...<br>Scanning order flow...<br>Identifying setups...<br>Building trade context...</div>
+    </div>`;
+}
+
+function renderCompanion(d){
+  const bias = d.traderSummary?.bias||'NEUTRAL';
+  const bclass = bias==='BULLISH'?'bull':bias==='BEARISH'?'bear':'neut';
+  const bcol = bias==='BULLISH'?'var(--green)':bias==='BEARISH'?'var(--red)':'var(--amber)';
+
+  document.getElementById('comp-body').innerHTML = `
+    <div class="csec">
+      <div class="csec-title">CHART BIAS</div>
+      <div class="bias-block">
+        <div class="bias-val ${bclass}">${bias}</div>
+        <div class="bias-sub">${d.traderSummary?.urgency||''} URGENCY · ${d.traderSummary?.risk||''}</div>
+      </div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">TOP OBSERVATION</div>
+      <div class="cdata"><div class="cdl">WHAT THE PRO SEES</div><div class="cdv">${d.traderSummary?.topObservation||'–'}</div></div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">SETUP QUALITY</div>
+      <div class="cstat ok"><div class="cdot"></div><div class="cst">${d.setups?.primary||'–'} · Grade: <strong style="color:var(--green)">${d.setups?.quality||'–'}</strong></div></div>
+      ${(d.setups?.secondary||[]).map(s=>`<div class="cstat"><div class="cdot"></div><div class="cst">${s}</div></div>`).join('')}
+      <div style="font-family:'Space Mono',monospace;font-size:8px;color:var(--dim);margin-top:5px;">Confidence: ${d.setups?.confidence||'–'}</div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">PRICE ACTION</div>
+      <div class="cdata"><div class="cdl">STRUCTURE</div><div class="cdv">${d.structure?.trend||'–'}</div></div>
+      <div class="cdata"><div class="cdl">VWAP</div><div class="cdv">${d.vwap?.position||'–'} · ${d.vwap?.dynamic||''}</div></div>
+      <div class="cdata"><div class="cdl">KEY LEVELS</div><div class="cdv">S: ${d.keyLevels?.immediateSupport||'–'} | R: ${d.keyLevels?.immediateResistance||'–'}</div></div>
+      <div class="cdata"><div class="cdl">MAGNET TARGET</div><div class="cdv">${d.keyLevels?.magnet||'–'}</div></div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">ORDER FLOW</div>
+      <div class="cstat ${d.orderflow?.pressure?.includes('buy')?'ok':d.orderflow?.pressure?.includes('sell')?'bad':'warn'}">
+        <div class="cdot"></div>
+        <div class="cst">${d.orderflow?.pressure||'–'}</div>
+      </div>
+      <div class="cdata"><div class="cdl">DELTA</div><div class="cdv">${d.orderflow?.delta||'–'}</div></div>
+      <div class="cdata"><div class="cdl">TAPE</div><div class="cdv">${d.orderflow?.tape||'–'}</div></div>
+      ${d.orderflow?.absorption?`<div class="cstat warn"><div class="cdot"></div><div class="cst">Absorption: ${d.orderflow.absorption}</div></div>`:''}
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">INDICATORS</div>
+      <div class="cdata"><div class="cdl">RSI</div><div class="cdv">${d.rsi?.value||'–'} — ${d.rsi?.condition||'–'}</div></div>
+      <div class="cdata"><div class="cdl">BOLLINGER BANDS</div><div class="cdv">${d.bollingerBands?.position||'–'}${d.bollingerBands?.squeeze?' | SQUEEZE':''}</div></div>
+      <div class="cdata"><div class="cdl">VOLUME</div><div class="cdv">${d.volume?.current||'–'} · ${d.volume?.note||''}</div></div>
+    </div>
+  `;
+}
+
+// ══════════════════════════════
+// SIGNAL GENERATION
+// ══════════════════════════════
+let signals = [], confList = [];
+
+const SIGNAL_SYSTEM = `You are the world's best ES futures scalping trader — think combination of Paul Tudor Jones, Mark Douglas discipline, and ICT order flow methodology. You have just received:
+
+1. A complete AI visual analysis of the trader's TradingView chart
+2. Live market data (ES price, VIX, related markets)
+3. The trader's manually entered key S/R levels
+4. The trader's current mental/emotional state
+
+Your job: Generate the most precise, high-probability scalping signal possible for the RTH session. Think through this like you are risking your own capital.
+
+ES contract specs: $50/point, $12.50/tick (0.25pt).
+
+HARD RULES:
+- Revenge/FOMO/overconfident/danger → FORCE NO-GO regardless of market
+- No genuine confluence → NO-GO, never force trades
+- Stops always behind structure, VWAP, or key level — never arbitrary
+- Targets at natural price magnets (VWAP, S/R, HOD/LOD, SD bands)
+- Midday 11:30am–1pm → very selective, reduce size recommendation
+- If setup quality is C grade → NO-GO or reduce confidence significantly
+
+Respond ONLY with valid JSON:
+{
+  "direction": "LONG" | "SHORT" | "NO-GO",
+  "setup": "precise setup name",
+  "confidence": 0-100,
+  "grade": "A+/A/B/C",
+  "entry": {
+    "zone": "e.g. 5778.25 – 5780.00",
+    "ideal": 5779.25,
+    "trigger": "exact trigger condition to enter",
+    "logic": "why this entry"
+  },
+  "stop": {
+    "price": 5775.00,
+    "points": 4.25,
+    "logic": "structural reason for stop placement"
+  },
+  "targets": [
+    {"label":"T1","price":5784.00,"points":4.75,"rr":"1.1R","action":"scale 40-50% off, move stop to entry"},
+    {"label":"T2","price":5789.50,"points":10.25,"rr":"2.4R","action":"scale 30% off, trail stop"},
+    {"label":"T3","price":5795.00,"points":15.75,"rr":"3.7R","action":"trail remainder to lock profit"}
+  ],
+  "management": [
+    "step1: immediate action on entry",
+    "step2: at T1 action",
+    "step3: at T2 action",
+    "step4: final management"
+  ],
+  "reasoning": "3-4 sentences. Professional, specific. Reference exact levels, indicators, and order flow from the chart read. Explain WHY this is or isn't a trade.",
+  "invalidation": [
+    "specific price/condition that cancels the trade",
+    "second invalidation condition",
+    "third condition"
+  ],
+  "mindsetNote": "Direct, honest assessment of the trader's mental state and how it affects this trade. Be firm if needed.",
+  "sizeNote": "Recommendation on contract size relative to normal given current conditions",
+  "noGoReason": "ONLY if NO-GO: detailed explanation of exactly why no trade"
+}`;
+
+async function generateSignal(){
+  if(!window._chartData){ alert('Read the chart first'); return; }
+  const btn = document.getElementById('btn-signal');
+  btn.disabled = true; btn.textContent = 'COMPUTING...';
+
+  showScanState();
+
+  // Gather live prices
+  const esEl = document.getElementById('tp-es');
+  const vixEl = document.getElementById('tp-vix');
+  const nqEl = document.getElementById('tp-nq');
+  const spyEl = document.getElementById('tp-spy');
+  const tnxEl = document.getElementById('tp-tnx');
+  const dxyEl = document.getElementById('tp-dxy');
+
+  const liveData = {
+    es: esEl.textContent,
+    vix: vixEl.textContent,
+    nq: nqEl.textContent,
+    spy: spyEl.textContent,
+    tenYear: tnxEl.textContent,
+    dxy: dxyEl.textContent,
+  };
+
+  const manualInputs = {
+    pdh:  document.getElementById('f-pdh').value || 'not provided',
+    pdl:  document.getElementById('f-pdl').value || 'not provided',
+    hod:  document.getElementById('f-hod').value || 'not provided',
+    lod:  document.getElementById('f-lod').value || 'not provided',
+    sup:  document.getElementById('f-sup').value || 'not provided',
+    res:  document.getElementById('f-res').value || 'not provided',
+    open: document.getElementById('f-open').value || 'not provided',
+    mood: document.getElementById('f-mood').value + ' — ' + moodMap[document.getElementById('f-mood').value],
+    emotion: document.getElementById('f-emotion').value || 'not selected',
+    pnl: document.getElementById('f-pnl').value || 'not provided',
+    extra: document.getElementById('f-extra').value || 'none',
+  };
+
+  const etNow = new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York'});
+  const etDate = new Date().toLocaleDateString('en-US',{timeZone:'America/New_York',weekday:'long',month:'long',day:'numeric'});
+
+  const prompt = `
+CURRENT TIME: ${etNow} ET | DATE: ${etDate}
+
+LIVE MARKET DATA (real-time feed):
+ES Futures: ${liveData.es}
+NQ Futures: ${liveData.nq}
+SPY ETF:    ${liveData.spy}
+VIX:        ${liveData.vix}
+10Y Yield:  ${liveData.tenYear}
+DXY:        ${liveData.dxy}
+
+AI CHART ANALYSIS (visual read of trader's TradingView chart):
+${JSON.stringify(window._chartData, null, 2)}
+
+TRADER'S KEY LEVELS (manually identified on chart):
+PDH: ${manualInputs.pdh} | PDL: ${manualInputs.pdl}
+Today HOD: ${manualInputs.hod} | LOD: ${manualInputs.lod}
+Support: ${manualInputs.sup} | Resistance: ${manualInputs.res}
+RTH Open: ${manualInputs.open}
+
+TRADER STATE (only the human knows this):
+Mental clarity: ${manualInputs.mood}
+Emotional state: ${manualInputs.emotion}
+Session P&L: ${manualInputs.pnl}
+Notes: ${manualInputs.extra}
+
+Generate the highest-quality trading signal you can. Think through this carefully — lives and capital are at stake. Be the world's best trader analyzing this setup.`;
+
+  try {
+    const res = await fetch(API,{
+      method:'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1500,
+        system: SIGNAL_SYSTEM,
+        messages:[{role:'user', content: prompt}]
+      })
+    });
+    const data = await res.json();
+    const raw = data.content?.map(b=>b.text||'').join('') || '';
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const sig = JSON.parse(clean);
+    renderSignal(sig);
+  } catch(e){
+    document.getElementById('signal-out').innerHTML = `<div style="padding:20px;font-family:'Space Mono',monospace;font-size:9px;color:var(--red);">Signal error: ${e.message}</div>`;
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ GENERATE SIGNAL';
+}
+
+function showScanState(){
+  document.getElementById('signal-out').innerHTML = `
+    <div class="scan-state">
+      <div class="scan-ring"></div>
+      <div class="scan-txt">SUPER TRADER COMPUTING</div>
+      <div class="scan-log">
+        Synthesizing chart analysis + live data...<br>
+        Cross-referencing key levels...<br>
+        Evaluating order flow confluence...<br>
+        Assessing trader psychology...<br>
+        Computing precision entry / stop / targets...
+      </div>
+    </div>`;
+}
+
+function renderSignal(s){
+  const dir = s.direction;
+  const isL=dir==='LONG', isS=dir==='SHORT', isN=dir==='NO-GO';
+  const bc = isL?'long':isS?'short':'nogo';
+  const conf = s.confidence||0;
+  const cc = conf>=70?'hi':conf>=50?'md':'lo';
+  const circ = 2*Math.PI*30;
+  const offset = circ - (conf/100)*circ;
+  const ts = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/New_York'});
+
+  signals.unshift({dir,ts,conf,sig:s});
+  confList.push(conf);
+  document.getElementById('tp-sigs').textContent = signals.length;
+  const avg = Math.round(confList.reduce((a,b)=>a+b,0)/confList.length);
+  document.getElementById('tp-conf').textContent = `avg conf ${avg}%`;
+
+  const mindClass = (s.mindsetNote||'').toLowerCase().match(/revenge|fomo|danger|stop|overcon/) ? 'bad'
+    : (s.mindsetNote||'').toLowerCase().match(/calm|good|focused|optimal/) ? 'ok' : 'warn';
+
+  const levelsHTML = !isN ? `
+    <div class="slc entry">
+      <div class="slc-l">ENTRY ZONE</div>
+      <div class="slc-v" style="font-size:11px">${s.entry?.zone||'–'}</div>
+      <div class="slc-s" style="color:var(--cyan)">ideal: ${s.entry?.ideal||'–'}</div>
+      <div class="slc-s" style="color:var(--dim);font-size:7px;text-align:center">${s.entry?.trigger||''}</div>
+    </div>
+    <div class="slc sl">
+      <div class="slc-l">STOP LOSS</div>
+      <div class="slc-v">${s.stop?.price||'–'}</div>
+      <div class="slc-s" style="color:var(--red)">${s.stop?.points||'?'}pts</div>
+      <div class="slc-s" style="color:var(--dim);font-size:7px;text-align:center">${s.stop?.logic||''}</div>
+    </div>
+    ${(s.targets||[]).map(t=>`
+    <div class="slc ${t.label.toLowerCase()}">
+      <div class="slc-l">${t.label}</div>
+      <div class="slc-v">${t.price}</div>
+      <div class="slc-s" style="color:var(--green)">${t.rr} · ${t.points}pts</div>
+      <div class="slc-s" style="color:var(--dim);font-size:7px;text-align:center">${t.action||''}</div>
+    </div>`).join('')}` : '';
+
+  const nogoHTML = isN ? `
+    <div class="nogo-wrap">
+      <div class="nogo-card">
+        <div class="nogo-label">⛔ NO TRADE — REASON</div>
+        <div class="nogo-text">${s.noGoReason||'No clear setup.'}</div>
+      </div>
+    </div>` : '';
+
+  document.getElementById('signal-out').innerHTML = `
+  <div class="sig-body">
+    <div class="sig-top">
+      <div class="sig-banner ${bc}">
+        <div class="sig-ts">● ${ts} ET · Grade: ${s.grade||'–'}</div>
+        <div class="sig-dir">${dir}</div>
+        <div class="sig-setup">${s.setup||''}</div>
+        ${s.sizeNote?`<div style="font-family:'Space Mono',monospace;font-size:7px;color:var(--amber);margin-top:4px;">${s.sizeNote}</div>`:''}
+      </div>
+      <div class="sig-conf">
+        <div class="cring-w">
+          <svg width="68" height="68" viewBox="0 0 68 68">
+            <circle class="cr-bg" cx="34" cy="34" r="30"/>
+            <circle class="cr-fg ${cc}" cx="34" cy="34" r="30" stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/>
+          </svg>
+          <div class="cr-inner">
+            <div class="cr-pct" style="color:${conf>=70?'var(--green)':conf>=50?'var(--amber)':'var(--red)'}">${conf}%</div>
+            <div class="cr-lbl">CONF</div>
+          </div>
+        </div>
+      </div>
+      <div class="sig-levels">
+        ${levelsHTML}
+      </div>
+    </div>
+
+    ${nogoHTML}
+
+    ${!isN?`
+    <div class="sig-bottom">
+      <div class="sb-cell">
+        <div class="sb-title">AI REASONING</div>
+        <div class="sb-text">${s.reasoning||'–'}</div>
+      </div>
+      <div class="sb-cell">
+        <div class="sb-title">TRADE MANAGEMENT</div>
+        <div class="mgmt-steps">
+          ${(s.management||[]).map((st,i)=>`<div class="mstep"><div class="msn">${i+1}</div><div class="mst">${st}</div></div>`).join('')}
+        </div>
+      </div>
+      <div class="sb-cell">
+        <div class="sb-title">INVALIDATION</div>
+        <ul class="inval-list">
+          ${(s.invalidation||[]).map(i=>`<li>${i}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+    <div class="mind-wrap">
+      <div class="mind-card ${mindClass}">
+        <div class="mind-label">MINDSET CHECK</div>
+        <div class="mind-text">${s.mindsetNote||'–'}</div>
+      </div>
+    </div>`:''}
+  </div>`;
+
+  // Update history bar
+  const hb = document.getElementById('hist-bar');
+  hb.innerHTML = `<span>SIGNALS:</span>` +
+    signals.map((sg,i)=>`<span class="hc ${sg.dir[0]}" onclick="replaySig(${i})">${sg.ts} ${sg.dir} ${sg.conf}%</span>`).join('');
+}
+
+function replaySig(i){ renderSignal(signals[i].sig); }
+</script>
+</body>
+</html>
